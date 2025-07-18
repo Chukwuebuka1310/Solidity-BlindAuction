@@ -95,12 +95,126 @@ contract BlindAuction{
 
 
     //2. Reveal Function
-    // function reveal(
-    //     uint[] values,
-    //     bool[] fakes,
-    //     bytes32[] secrets
-    // ) external OnlyBefore(i_revealEnd)OnlyAfter(i_biddingEnd){
+    /**
+     * 
+     * @param values refers the amount a particular caller might have sent. during the 
+     * @param fakes refers to the bools that the caller passed
+     * @param secrets refers to the secret the caller passed (all hashed, as shown in bid function)
+     */
 
-    // }
+    /*
+    The function can oly be called after the bidding duration(OnlyAfter(i_biddingEnd)) and in the reveal period(OnlyBefore(i_revealEnd)). 
+    Once the reveal duration is passed, we cant call the function no more.
+    */
+    function reveal(
+        uint[] calldata values,
+        bool[] calldata fakes,
+        bytes32[] calldata secrets
+    ) external OnlyBefore(i_revealEnd)OnlyAfter(i_biddingEnd){
+
+        //With the help of the caller's address(msg.sender) get the length of the array of 
+        //that particular caller from the mapping and sign it to lenght with a type uint
+        uint length = bids[msg.sender].length;
+
+        //Check if number of element of the values array passed as parameters is equal to the number of the element in
+        //the array from the mapping
+        require(values.length == length);
+
+        //Check if number of element of the fakes array passed as parameters is equal to the number of the element in
+        //the array from the mapping
+        require(fakes.length == length);
+
+        //Check if number of element of the secrets array passed as parameters is equal to the number of the element in
+        //the array from the mapping
+        require(secrets.length == length);
+
+        //Declared a variable refund of type uint
+        uint refund;
+
+        //Loop throght the elements from the array gotten from the mapping
+        for(uint i = 0; i < length; i++){
+
+            //Get a copy of the Bid Struct with the variable name bidToCheck with the
+            //keyword "storage" indicating the next few commad entails parmanently update
+            //the contract state. Assign the variable to the presnt array element from the loop above
+            Bid storage bidToCheck = bids[msg.sender][i];
+
+            // Unpack current index values into local variables
+            (uint value, bool fake, bytes32 secret) = (values[i], fakes[i], secrets[i]);
+
+            //Check if the blindedBid of type bytes32 is not the same as the hash gotten from the
+            //the hashing(keccak256(abi.encodePacked(value, fake, secret))), if yes
+            if(bidToCheck.blindedBid != keccak256(abi.encodePacked(value, fake, secret))){
+
+                //Then run the following code under
+                continue;
+            }
+
+            //Add the callers deposit to the declare refund variable
+            refund += bidToCheck.deposit;
+
+            //Check if the bool of false is not false and the callers deposit (bidToCheck.deposit) is greater
+            //than or equal to the value assigned above, if yes
+            if(!false && bidToCheck.deposit >= value){
+
+                /**
+                 * Pass the caller(msg.sender) and the value to a placeBid function. the function is an internal 
+                 * function and expects two parameters the callers address(msg.sender) and the value(the variable of type
+                 * uint declared to hold the abount of token to be revealed by the  caller of the reveal function). the function
+                 * is expected to return a bool(ethier true or false). when the function is called, its performs some conditionals
+                 * //1. Check if the value is less than or equal to highestBid(state variable), if yes it returns false
+                 * //2. Check if the highestBidder address(State variable) is not equal to an empty address, if yes
+                 * //Then pass the highestBid(state variable) to the pendingReturn mapping with the help of the highestBidder address
+                 * // Finally go and assign the new highestBid(state) to the value passed as parameters,
+                 * // And als assign the address(msg.sender) passed to the highestBid.
+                 * //Lastly if all goes well return true
+                */
+                if(placeBid(msg.sender, value)){ //If the conditionals returns true
+                    refund -= value; // Get the refund variable and subtract the present value from the refund variable
+                }
+            }
+
+            //Then set the blindedBid of the sender to an empty bytes so that sender can't reclaim deposit
+            bidToCheck.blindedBid = bytes32(0);
+        }
+
+        //Transfer the remaining amount in the refund to the sender
+        payable(msg.sender).transfer(refund);
+    }
+
+    //3. placeBid function
+    /**
+     * Pass the caller(msg.sender) and the value to a placeBid function. the function is an internal 
+     * function and expects two parameters the callers address(msg.sender) and the value(the variable of type
+     * uint declared to hold the abount of token to be revealed by the  caller of the reveal function). the function
+     * is expected to return a bool(ethier true or false)
+    */
+
+    function placeBid(address bidder, uint value) internal returns(bool){
+        
+        ////1. Check if the value is less than or equal to highestBid(state variable), if yes 
+        if(value <= highestBid){
+
+            //it returns false
+            return false;
+        }
+
+        //2. Check if the highestBidder address(State variable) is not equal to an empty address, if yes
+        if(highestBidder != address(0)){
+
+            //Then pass the highestBid(state variable) to the pendingReturn mapping with the help of the highestBidder address
+            pendingReturns[bidder] += highestBid;
+        }
+
+        // Finally go and assign the new highestBid(state) to the value passed as parameters,
+        highestBid = value;
+
+        // And als assign the address(msg.sender) passed to the highestBid.
+        highestBidder = msg.sender;
+
+        //Lastly if all goes well return true
+        return true;
+
+    } 
 
 }
