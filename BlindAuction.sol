@@ -12,11 +12,19 @@ contract BlindAuction{
     //Custom Error
     error TooLate();
     error TooEarly();
+    error NotBeneficiary();
+    error AuctionEndedAlreadyCalled();
+
+    //Events
+    event AuctionEnd(address winner, uint winnerAmount);
 
 
     //State variable to keep track
     uint highestBid;
     address highestBidder;
+
+    //Keeps track of the bidding status whether its has ended or still ongoin
+    bool ended;
 
     //Struct for the bid padded durinhg the auction
     struct Bid{
@@ -45,6 +53,11 @@ contract BlindAuction{
 
     modifier OnlyAfter(uint time) {
         if(block.timestamp <= time) revert TooEarly();
+        _;
+    }
+
+    modifier OnlyBeneficiary() {
+        if(msg.sender != i_beneficiary) revert NotBeneficiary();
         _;
     }
 
@@ -216,5 +229,42 @@ contract BlindAuction{
         return true;
 
     } 
+
+    //4. Withdraw function
+    //Can be called by outbidden bidders to withdraw their token.
+    function withdraw() external {
+
+        //Assign the variable amount to the bid of the sender that has been added to the 
+        //pendingReturn mapping.
+        uint amount = pendingReturns[msg.sender];
+
+        //Check if the bid(amount) gotten is greater than zer, if yes
+        if(amount > 0){
+
+            //Make that bid in the sender to equal zero. 
+            pendingReturns[msg.sender] = 0;
+        }
+
+        //Transfer all the amount to the caller of the function.
+        payable(msg.sender).transfer(amount);
+    }
+
+    //5. AuctionEnd function
+    //To be called only after the reveal period has ended(OnlyAfter(i_revealEnd)) and can oly be called by the beneficiary(OnlyBeneficiary)
+    function autionEnd() external OnlyAfter(i_revealEnd) OnlyBeneficiary{
+
+        //Checks the decared ended variable of type bool, if it returns true, then revert with custom error message
+        if (ended) revert AuctionEndedAlreadyCalled();
+        
+        //Transfers the highest bid to the beneficiary
+        i_beneficiary.transfer(highestBid);
+
+        //Set the ended to true, so that the function can't be called multiple times by the beneficiary
+        ended = true;
+
+        //Emit the following event special function indicating the highestBid and the highestBidder
+        emit AuctionEnd(highestBidder, highestBid);
+
+    }
 
 }
